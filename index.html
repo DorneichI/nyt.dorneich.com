@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NYT Reader</title>
+<style>
+  body { font-family: Georgia, serif; max-width: 800px; margin: 20px auto; padding: 0 16px; color: #111; }
+  h1 { font-size: 1.4rem; border-bottom: 2px solid #111; padding-bottom: 8px; }
+  #controls { font-family: Arial, sans-serif; font-size: 0.85rem; margin-bottom: 10px; }
+  #feedSelector { border: 1px solid #999; border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; }
+  #feedSelector > summary { cursor: pointer; font-weight: bold; padding: 4px 0; }
+  #feeds { margin-top: 4px; }
+  details.category { border: 1px solid #ddd; border-radius: 4px; margin-bottom: 2px; padding: 2px 8px; }
+  details.category summary { cursor: pointer; font-weight: bold; padding: 2px 0; font-size: 0.85rem; }
+  details.category .catBody { display: flex; flex-wrap: wrap; gap: 3px 14px; padding: 4px 4px 6px; }
+  details.category .catBody label { white-space: nowrap; }
+  .catActions { font-weight: normal; font-size: 0.75rem; margin-left: 10px; }
+  .catCount { font-weight: normal; font-size: 0.8rem; color: #666; }
+  .catActions a { cursor: pointer; color: #0645AD; text-decoration: underline; }
+  #toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+  #status { font-family: Arial, sans-serif; font-size: 0.8rem; color: #666; margin-bottom: 10px; }
+  ul#list { list-style: none; padding: 0; }
+  li.item { padding: 10px 0; border-bottom: 1px solid #ddd; }
+  a.title { font-size: 1.05rem; font-weight: bold; color: #111; text-decoration: none; }
+  a.title:hover { text-decoration: underline; }
+  .meta { font-family: Arial, sans-serif; font-size: 0.75rem; color: #777; margin-top: 2px; }
+  .desc { font-size: 0.95rem; color: #333; margin-top: 4px; }
+  #pagination { font-family: Arial, sans-serif; font-size: 0.85rem; display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+  button { cursor: pointer; }
+  #errorBox { color: #a00; font-family: Arial, sans-serif; font-size: 0.85rem; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+
+<h1>NYT Reader</h1>
+
+<div id="controls">
+  <details id="feedSelector">
+    <summary id="feedSelectorSummary">Select Feeds</summary>
+    <div id="feeds"></div>
+  </details>
+  <div id="toolbar">
+    <button id="loadBtn">Load / Refresh Feeds</button>
+    <label>Per page:
+      <select id="perPage">
+        <option>10</option>
+        <option selected>20</option>
+        <option>50</option>
+        <option>100</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<div id="status"></div>
+<div id="errorBox"></div>
+
+<ul id="list"></ul>
+
+<div id="pagination">
+  <button id="prevBtn">&laquo; Prev</button>
+  <span id="pageLabel"></span>
+  <button id="nextBtn">Next &raquo;</button>
+</div>
+
+<script>
+const CATEGORIES = [
+  {
+    name: "Top / General News",
+    feeds: [
+      { label: "Home Page", url: "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml" },
+      { label: "World", url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml" },
+      { label: "U.S.", url: "https://rss.nytimes.com/services/xml/rss/nyt/US.xml" },
+      { label: "Politics", url: "https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml" },
+      { label: "NY Region", url: "https://rss.nytimes.com/services/xml/rss/nyt/NYRegion.xml" },
+      { label: "Business", url: "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml" },
+      { label: "Technology", url: "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml" },
+      { label: "Opinion", url: "https://rss.nytimes.com/services/xml/rss/nyt/Opinion.xml" },
+      { label: "Sunday Opinion", url: "https://rss.nytimes.com/services/xml/rss/nyt/sunday-review.xml" },
+      { label: "Education", url: "https://rss.nytimes.com/services/xml/rss/nyt/Education.xml" },
+      { label: "Obituaries", url: "https://rss.nytimes.com/services/xml/rss/nyt/Obituaries.xml" }
+    ]
+  },
+  {
+    name: "World Regions",
+    feeds: [
+      { label: "Africa", url: "https://rss.nytimes.com/services/xml/rss/nyt/Africa.xml" },
+      { label: "Americas", url: "https://rss.nytimes.com/services/xml/rss/nyt/Americas.xml" },
+      { label: "Asia Pacific", url: "https://rss.nytimes.com/services/xml/rss/nyt/AsiaPacific.xml" },
+      { label: "Europe", url: "https://rss.nytimes.com/services/xml/rss/nyt/Europe.xml" },
+      { label: "Middle East", url: "https://rss.nytimes.com/services/xml/rss/nyt/MiddleEast.xml" }
+    ]
+  },
+  {
+    name: "Science & Health",
+    feeds: [
+      { label: "Science", url: "https://rss.nytimes.com/services/xml/rss/nyt/Science.xml" },
+      { label: "Climate / Environment", url: "https://rss.nytimes.com/services/xml/rss/nyt/Climate.xml" },
+      { label: "Space & Cosmos", url: "https://rss.nytimes.com/services/xml/rss/nyt/Space.xml" },
+      { label: "Health", url: "https://rss.nytimes.com/services/xml/rss/nyt/Health.xml" },
+      { label: "Well Blog", url: "https://rss.nytimes.com/services/xml/rss/nyt/Well.xml" }
+    ]
+  },
+  {
+    name: "Sports",
+    feeds: [
+      { label: "Sports (all)", url: "https://rss.nytimes.com/services/xml/rss/nyt/Sports.xml" },
+      { label: "Pro Football", url: "https://rss.nytimes.com/services/xml/rss/nyt/ProFootball.xml" },
+      { label: "Pro Basketball", url: "https://rss.nytimes.com/services/xml/rss/nyt/ProBasketball.xml" },
+      { label: "College Football", url: "https://rss.nytimes.com/services/xml/rss/nyt/CollegeFootball.xml" },
+      { label: "College Basketball", url: "https://rss.nytimes.com/services/xml/rss/nyt/CollegeBasketball.xml" },
+      { label: "Baseball", url: "https://rss.nytimes.com/services/xml/rss/nyt/Baseball.xml" },
+      { label: "Hockey", url: "https://rss.nytimes.com/services/xml/rss/nyt/Hockey.xml" },
+      { label: "Soccer", url: "https://rss.nytimes.com/services/xml/rss/nyt/Soccer.xml" },
+      { label: "Golf", url: "https://rss.nytimes.com/services/xml/rss/nyt/Golf.xml" },
+      { label: "Tennis", url: "https://rss.nytimes.com/services/xml/rss/nyt/Tennis.xml" }
+    ]
+  },
+  {
+    name: "Arts & Culture",
+    feeds: [
+      { label: "Arts (all)", url: "https://rss.nytimes.com/services/xml/rss/nyt/Arts.xml" },
+      { label: "Art & Design", url: "https://rss.nytimes.com/services/xml/rss/nyt/ArtandDesign.xml" },
+      { label: "Book Review", url: "https://rss.nytimes.com/services/xml/rss/nyt/Books/Review.xml" },
+      { label: "Dance", url: "https://rss.nytimes.com/services/xml/rss/nyt/Dance.xml" },
+      { label: "Movies", url: "https://rss.nytimes.com/services/xml/rss/nyt/Movies.xml" },
+      { label: "Music", url: "https://rss.nytimes.com/services/xml/rss/nyt/Music.xml" },
+      { label: "Television", url: "https://rss.nytimes.com/services/xml/rss/nyt/Television.xml" },
+      { label: "Theater", url: "https://rss.nytimes.com/services/xml/rss/nyt/Theater.xml" },
+      { label: "Lens (Photo)", url: "https://rss.nytimes.com/services/xml/rss/nyt/Lens.xml" }
+    ]
+  },
+  {
+    name: "Style & Living",
+    feeds: [
+      { label: "Fashion & Style", url: "https://rss.nytimes.com/services/xml/rss/nyt/FashionandStyle.xml" },
+      { label: "Dining & Wine", url: "https://rss.nytimes.com/services/xml/rss/nyt/DiningandWine.xml" },
+      { label: "Love / Weddings", url: "https://rss.nytimes.com/services/xml/rss/nyt/Weddings.xml" },
+      { label: "T Magazine", url: "https://rss.nytimes.com/services/xml/rss/nyt/tmagazine.xml" },
+      { label: "Travel", url: "https://rss.nytimes.com/services/xml/rss/nyt/Travel.xml" },
+      { label: "Magazine", url: "https://rss.nytimes.com/services/xml/rss/nyt/Magazine.xml" },
+      { label: "Real Estate", url: "https://rss.nytimes.com/services/xml/rss/nyt/RealEstate.xml" },
+      { label: "Automobiles", url: "https://rss.nytimes.com/services/xml/rss/nyt/Automobiles.xml" },
+      { label: "Jobs", url: "https://rss.nytimes.com/services/xml/rss/nyt/Jobs.xml" }
+    ]
+  },
+  {
+    name: "Most Popular",
+    feeds: [
+      { label: "Most Emailed", url: "https://rss.nytimes.com/services/xml/rss/nyt/MostEmailed.xml" },
+      { label: "Most Shared", url: "https://rss.nytimes.com/services/xml/rss/nyt/MostShared.xml" },
+      { label: "Most Viewed", url: "https://rss.nytimes.com/services/xml/rss/nyt/MostViewed.xml" }
+    ]
+  },
+  {
+    name: "Opinion Columnists",
+    feeds: [
+      { label: "Charles M. Blow", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/charles-m-blow/rss.xml" },
+      { label: "Jamelle Bouie", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/jamelle-bouie/rss.xml" },
+      { label: "David Brooks", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/david-brooks/rss.xml" },
+      { label: "Frank Bruni", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/frank-bruni/rss.xml" },
+      { label: "Gail Collins", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/gail-collins/rss.xml" },
+      { label: "Ross Douthat", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/ross-douthat/rss.xml" },
+      { label: "Maureen Dowd", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/maureen-dowd/rss.xml" },
+      { label: "Thomas L. Friedman", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/thomas-l-friedman/rss.xml" },
+      { label: "Michelle Goldberg", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/michelle-goldberg/rss.xml" },
+      { label: "Ezra Klein", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/ezra-klein/rss.xml" },
+      { label: "Nicholas Kristof", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/nicholas-kristof/rss.xml" },
+      { label: "Paul Krugman", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/paul-krugman/rss.xml" },
+      { label: "Farhad Manjoo", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/farhad-manjoo/rss.xml" },
+      { label: "Bret Stephens", url: "https://www.nytimes.com/svc/collections/v1/publish/www.nytimes.com/column/bret-stephens/rss.xml" }
+    ]
+  }
+];
+
+// Flatten into one FEEDS array (order preserved) for indexing by checkbox value
+const FEEDS = [];
+CATEGORIES.forEach(cat => cat.feeds.forEach(f => FEEDS.push(f)));
+
+let allItems = [];
+let currentPage = 1;
+
+// Feeds checked by default on FIRST-EVER load (before any saved prefs exist)
+const DEFAULT_CHECKED_LABELS = new Set([
+  "Home Page", "World", "U.S.", "Politics", "Business", "Technology", "Opinion"
+]);
+
+const PREFS_KEY = "nytReaderPrefs";
+
+function loadPrefs() {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function savePrefs() {
+  try {
+    const checkedIdx = Array.from(document.querySelectorAll(".feedChk:checked")).map(c => parseInt(c.value, 10));
+    const openCats = Array.from(document.querySelectorAll("details.category"))
+      .map((d, i) => d.open ? i : -1)
+      .filter(i => i !== -1);
+    const selectorOpen = document.getElementById("feedSelector").open;
+    const prefs = {
+      checkedIdx,
+      openCats,
+      selectorOpen,
+      perPage: document.getElementById("perPage").value
+    };
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch (e) {
+    // localStorage unavailable (e.g. some restricted contexts) — fail silently
+  }
+}
+
+const savedPrefs = loadPrefs();
+
+const feedsDiv = document.getElementById("feeds");
+let idx = 0;
+CATEGORIES.forEach((cat, catI) => {
+  const details = document.createElement("details");
+  details.className = "category";
+  if (savedPrefs && savedPrefs.openCats && savedPrefs.openCats.includes(catI)) {
+    details.open = true;
+  }
+
+  const summary = document.createElement("summary");
+  summary.innerHTML = `${cat.name} <span class="catCount"></span> <span class="catActions">(<a data-act="all">all</a> / <a data-act="none">none</a>)</span>`;
+  details.appendChild(summary);
+
+  const countSpan = summary.querySelector(".catCount");
+  function updateCatCount() {
+    const n = body.querySelectorAll("input.feedChk:checked").length;
+    const total = cat.feeds.length;
+    countSpan.textContent = `(${n}/${total})`;
+  }
+
+  const body = document.createElement("div");
+  body.className = "catBody";
+  cat.feeds.forEach(f => {
+    const myIdx = idx++;
+    let isChecked;
+    if (savedPrefs) {
+      isChecked = savedPrefs.checkedIdx.includes(myIdx);
+    } else {
+      isChecked = DEFAULT_CHECKED_LABELS.has(f.label);
+    }
+    const label = document.createElement("label");
+    label.innerHTML = `<input type="checkbox" class="feedChk" value="${myIdx}" ${isChecked ? "checked" : ""}> ${f.label}`;
+    body.appendChild(label);
+  });
+  details.appendChild(body);
+  updateCatCount();
+
+  body.addEventListener("change", updateCatCount);
+
+  summary.querySelectorAll(".catActions a").forEach(a => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      const check = a.dataset.act === "all";
+      body.querySelectorAll("input.feedChk").forEach(cb => cb.checked = check);
+      savePrefs();
+      updateSelectorSummary();
+      updateCatCount();
+    });
+  });
+
+  details.addEventListener("toggle", savePrefs);
+
+  feedsDiv.appendChild(details);
+});
+
+function updateSelectorSummary() {
+  const n = document.querySelectorAll(".feedChk:checked").length;
+  document.getElementById("feedSelectorSummary").textContent = `Select Feeds (${n} selected)`;
+}
+updateSelectorSummary();
+
+// Restore perPage / outer-selector-open settings from saved prefs
+if (savedPrefs) {
+  if (savedPrefs.perPage) document.getElementById("perPage").value = savedPrefs.perPage;
+  if (savedPrefs.selectorOpen) document.getElementById("feedSelector").open = true;
+}
+
+document.getElementById("feedSelector").addEventListener("toggle", savePrefs);
+
+// Save prefs whenever a feed checkbox or perPage setting changes
+feedsDiv.addEventListener("change", (e) => {
+  if (e.target.classList.contains("feedChk")) {
+    savePrefs();
+    updateSelectorSummary();
+  }
+});
+document.getElementById("loadBtn").addEventListener("click", loadFeeds);
+document.getElementById("perPage").addEventListener("change", () => {
+  currentPage = 1;
+  savePrefs();
+  render();
+});
+document.getElementById("prevBtn").addEventListener("click", () => { if (currentPage > 1) { currentPage--; render(); } });
+document.getElementById("nextBtn").addEventListener("click", () => {
+  const perPage = parseInt(document.getElementById("perPage").value, 10);
+  if (currentPage * perPage < allItems.length) { currentPage++; render(); }
+});
+
+function parseRSSDate(str) {
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+async function fetchFeed(feed) {
+  const res = await fetch(feed.url);
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${feed.label}`);
+  const text = await res.text();
+  const xml = new DOMParser().parseFromString(text, "application/xml");
+  const parseErr = xml.querySelector("parsererror");
+  if (parseErr) throw new Error(`Could not parse XML for ${feed.label}`);
+  const items = Array.from(xml.querySelectorAll("item")).map(item => ({
+    title: item.querySelector("title")?.textContent?.trim() || "(no title)",
+    link: item.querySelector("link")?.textContent?.trim() || "#",
+    pubDate: item.querySelector("pubDate")?.textContent?.trim() || "",
+    ts: parseRSSDate(item.querySelector("pubDate")?.textContent || ""),
+    desc: (item.querySelector("description")?.textContent || "").replace(/<[^>]+>/g, "").trim(),
+    section: feed.label
+  }));
+  return items;
+}
+
+async function loadFeeds() {
+  const statusEl = document.getElementById("status");
+  const errEl = document.getElementById("errorBox");
+  errEl.textContent = "";
+  const checked = Array.from(document.querySelectorAll(".feedChk:checked")).map(c => FEEDS[parseInt(c.value, 10)]);
+  if (checked.length === 0) { statusEl.textContent = "Select at least one feed."; return; }
+  statusEl.textContent = "Loading " + checked.length + " feed(s)...";
+
+  const results = await Promise.allSettled(checked.map(fetchFeed));
+  let items = [];
+  const errors = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") items = items.concat(r.value);
+    else errors.push(`${checked[i].label}: ${r.reason.message}`);
+  });
+
+  // dedup by link
+  const seen = new Set();
+  const deduped = [];
+  for (const it of items) {
+    if (!seen.has(it.link)) { seen.add(it.link); deduped.push(it); }
+  }
+  deduped.sort((a, b) => b.ts - a.ts);
+
+  allItems = deduped;
+  currentPage = 1;
+  statusEl.textContent = `Loaded ${allItems.length} unique articles from ${checked.length} feed(s).`;
+  if (errors.length) {
+    errEl.textContent = "Some feeds failed to load:\n" + errors.join("\n");
+  }
+  render();
+}
+
+function render() {
+  const list = document.getElementById("list");
+  const perPage = parseInt(document.getElementById("perPage").value, 10);
+  const totalPages = Math.max(1, Math.ceil(allItems.length / perPage));
+  if (currentPage > totalPages) currentPage = totalPages;
+  const start = (currentPage - 1) * perPage;
+  const pageItems = allItems.slice(start, start + perPage);
+
+  list.innerHTML = "";
+  pageItems.forEach(it => {
+    const li = document.createElement("li");
+    li.className = "item";
+    const dateStr = it.ts ? new Date(it.ts).toLocaleString() : it.pubDate;
+    li.innerHTML = `
+      <a class="title" href="${it.link}" target="_blank" rel="noopener">${it.title}</a>
+      <div class="meta">${it.section} &middot; ${dateStr}</div>
+      <div class="desc">${it.desc}</div>
+    `;
+    list.appendChild(li);
+  });
+
+  document.getElementById("pageLabel").textContent = `Page ${currentPage} of ${totalPages} (${allItems.length} articles)`;
+}
+
+// Auto-load on page open using whatever is checked (saved or default)
+loadFeeds();
+</script>
+
+</body>
+</html>
